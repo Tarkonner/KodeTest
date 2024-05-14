@@ -1,6 +1,5 @@
 package com.example;
 
-import java.beans.Statement;
 import java.io.*;
 import java.net.*;
 import java.sql.Connection;
@@ -17,18 +16,14 @@ public class Server
     static DataOutputStream outgoingToClient;
 
     //Database
-    static String dataPath = "jdbc:sqlite:Data/Data.sqlite";
+    static String dataPath = "jdbc:sqlite:demo\\Database.sqlite";
     static Connection dataCon;
 
     public static void main(String[] args) throws IOException {
         //Connect to Database
         try {
-            // Load the SQLite JDBC driver
             Class.forName("org.sqlite.JDBC");
-            // Get the InputStream for the database file
-            InputStream is = DatabaseAccessor.class.getResourceAsStream("/Data.sqlite3");
-            // Use the InputStream to create a Connection
-            dataCon = DriverManager.getConnection("jdbc:sqlite:" + is);
+            dataCon = DriverManager.getConnection("jdbc:sqlite:database.db");
             System.out.println("Connected to the database successfully!");
         } catch (ClassNotFoundException | SQLException e) {
             System.out.println(e.getMessage());
