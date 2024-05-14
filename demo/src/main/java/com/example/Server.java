@@ -4,6 +4,12 @@ import java.io.*;
 import java.net.*;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import org.eclipse.persistence.internal.databaseaccess.DatabaseAccessor;
@@ -24,6 +30,7 @@ public class Server
         try {
             Class.forName("org.sqlite.JDBC");
             dataCon = DriverManager.getConnection("jdbc:sqlite:database.db");
+            MakeTable();
             System.out.println("Connected to the database successfully!");
         } catch (ClassNotFoundException | SQLException e) {
             System.out.println(e.getMessage());
@@ -75,7 +82,13 @@ public class Server
         //Getting data
         try
         {
-
+            String sql = "INSERT INTO doctors(name, id, department) VALUES(?,?,?)";
+            PreparedStatement statement = dataCon.prepareStatement(sql);
+            statement.setString(1, name);
+            statement.setInt(2, ID);
+            statement.setString(3, department);
+            statement.executeUpdate();
+            System.out.println("Doctor added successfully.");
         }
         catch(Exception e)
         {
@@ -90,7 +103,13 @@ public class Server
         //Getting data
         try
         {
-
+            String sql = "SELECT department FROM doctors WHERE name=?";
+            PreparedStatement statement = dataCon.prepareStatement(sql);
+            statement.setString(1, name);
+            ResultSet rs = statement.executeQuery();
+            if (rs.next()) {
+                department = rs.getString("department");
+            }
         }
         catch(Exception e)
         {
@@ -110,5 +129,17 @@ public class Server
     void AddPatient()
     {
 
+    }
+
+    static void MakeTable()
+    {
+        try {
+            String sql = "CREATE TABLE IF NOT EXISTS doctors(name TEXT PRIMARY KEY, id INTEGER, department TEXT)";
+            java.sql.Statement stmt = dataCon.createStatement();
+            stmt.execute(sql); 
+            System.out.println("Table created successfully.");
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
     }
 }
