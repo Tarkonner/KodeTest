@@ -7,7 +7,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
-
+import java.util.ArrayList;
+import java.util.List;
 import java.sql.ResultSet;
 
 public class Server 
@@ -20,6 +21,8 @@ public class Server
     //Database
     static String dataPath = "jdbc:sqlite:demo\\Database.sqlite";
     static Connection dataCon;
+
+    private static String splitSymbol = "£";
 
     public static void main(String[] args) throws IOException {
         //Connect to Database
@@ -62,17 +65,31 @@ public class Server
             while ((message = ingoingToServer.readUTF())!= null) {
                 System.out.println("Message Received: " + message);
 
+                String[] splitMessage = message.split(splitSymbol);
+
                 //Commands
-                switch (message) {
-                    case "doctor":
-                        AddDoctor("Emil", 1, "Bone");
+                switch (splitMessage[0].toLowerCase()) {
+                    case "ad": //Add doctor
+                        int ID = Integer.parseInt(splitMessage[2]);
+                        AddDoctor(splitMessage[1], ID, splitMessage[3]);
                         break;
-                    case "find doctor":
-                        DoctorsDepartment("Emil");
+                    case "fd": //Find Doctor
+                        DoctorsDepartment(splitMessage[1]);
                         break;
-                    case "patient":
-                        String[] docs = {"Emil"};
-                        AddPatient("Bone", "Emma", 123, docs);
+                    case "ap": //Add Patient
+                        List<String> docsNames = new ArrayList<>();
+                        //Add doctor
+                        for(int i = 4; i < splitMessage.length; i++)
+                        {
+                            docsNames.add(splitMessage[i]);
+                        }
+                        int SCN = Integer.parseInt(splitMessage[2]);
+                        AddPatient(splitMessage[1], SCN, splitMessage[3], docsNames);
+                        break;
+                    case "fpwi": //Find patient with ID
+                        int scn = Integer.parseInt(splitMessage[1]);
+                        int doctorID = Integer.parseInt(splitMessage[2]);
+                        LookUpPatient(scn, doctorID);
                         break;
                     default:
                         outgoingToClient.writeUTF("No Command found");
@@ -101,7 +118,7 @@ public class Server
             System.out.println("Shutting down server");
         }
     }    
-
+//#region ADD
     static void AddDoctor(String name, int ID, String department)
     {
         //Getting data
@@ -121,6 +138,35 @@ public class Server
         }
     }
 
+
+
+    static void AddPatient(String patiantName, int socialSecurityNumber, String department, List<String> assiantDoctors)
+    {
+        try
+        {
+            // Assuming you have a table structure that can accommodate the data
+            String sql = "INSERT INTO admissions(department, patient_name, social_security_number, doctors_assiant) VALUES(?,?,?,?)";
+            // Insert the medical journal data
+            PreparedStatement pstmt = dataCon.prepareStatement(sql);
+            pstmt.setString(1, department);
+            pstmt.setString(2, patiantName);
+            pstmt.setInt(3, socialSecurityNumber);
+            
+            // Join the list of doctors into a single string
+            String doctorsAssiantString = String.join("", assiantDoctors);
+            
+            // Set the joined string as the fourth parameter in the SQL statement
+            pstmt.setString(4, doctorsAssiantString);
+            pstmt.executeUpdate();
+
+            System.out.println("Data saved successfully.");
+        } catch (SQLException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+    //#endregion
+
+    //#region Find things in database
     static void DoctorsDepartment(String name)
     {
         String department = "";
@@ -151,31 +197,83 @@ public class Server
         }
     }
 
-    static void AddPatient(String department, String patiantName, int socialSecurityNumber, String[] assiantDoctors)
+    static void LookUpPatient(int socialSecurityNumber, int doctorsID)
     {
-        try
-        {
-            // Assuming you have a table structure that can accommodate the data
-            String sql = "INSERT INTO admissions(department, patient_name, social_security_number, doctors_assiant) VALUES(?,?,?,?)";
-            // Insert the medical journal data
-            PreparedStatement pstmt = dataCon.prepareStatement(sql);
-            pstmt.setString(1, department);
-            pstmt.setString(2, patiantName);
-            pstmt.setInt(3, socialSecurityNumber);
-            
-            // Join the list of doctors into a single string
-            String doctorsAssiantString = String.join("", assiantDoctors);
-            
-            // Set the joined string as the fourth parameter in the SQL statement
-            pstmt.setString(4, doctorsAssiantString);
-            pstmt.executeUpdate();
+        String message = "";
 
-            System.out.println("Data saved successfully.");
+        // Fetch the doctor's name
+        String doctorName = ""; 
+        String doctorsDepartment = "";
+        try {
+            //Get name
+            String SQL_GetDoctorsName = "SELECT name, department FROM doctors WHERE ID=?";
+            PreparedStatement statement = dataCon.prepareStatement(SQL_GetDoctorsName);
+            statement.setInt(1, doctorsID);
+            ResultSet rs = statement.executeQuery();
+            if (rs.next()) {
+                doctorName = rs.getString("name");
+                doctorsDepartment = rs.getString("department");
+            }
         } catch (SQLException e) {
             System.out.println(e.getMessage());
         }
-    }
 
+        //Check
+        if(doctorName.isBlank())
+        {
+            message = "No doctor with ID";
+        }
+        else
+        {
+            //Check if the doctor can see journal
+            try {
+                //Get patient department
+                String department = "";
+                String SQL_GetPatientDepartment = "SELECT department FROM admissions WHERE social_security_number=? AND doctors_assiant=?";
+                PreparedStatement deptStatement = dataCon.prepareStatement(SQL_GetPatientDepartment);
+                ResultSet deptResult = deptStatement.executeQuery();
+                if (deptResult.next())
+                    department = deptResult.getString("department");
+
+                if(department != doctorsDepartment)
+                {
+                    message = "Doctor not part of department of patient";
+                }
+                else
+                {
+                    //See if there is a doctor there match the info.
+                    String SQL_CheckAssistantDoctor = "SELECT COUNT(*) FROM admissions WHERE social_security_number=? AND doctors_assiant=?";
+                    PreparedStatement checkStatement = dataCon.prepareStatement(SQL_CheckAssistantDoctor);
+                    checkStatement.setInt(1, socialSecurityNumber);
+                    checkStatement.setString(2, doctorName); 
+                    
+                    
+                    ResultSet countResult = checkStatement.executeQuery();
+                    if (countResult.next()) {
+                        int count = countResult.getInt(1);
+                        if (count > 0) {
+                            message = "An admission with social security number " + socialSecurityNumber + " has an assistant doctor with the name " + doctorName + ".";
+                        } else {
+                            message = doctorName + "has no patient with that security number";
+                        }
+                    }
+                }
+            } catch (SQLException e) {
+                System.out.println(e.getMessage());
+            }
+        }
+        //Send message to client
+        if (outgoingToClient!= null) {
+            try {
+                outgoingToClient.writeUTF(message);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    //#endregion
+
+    //#region Tabels
     static void MakeDoctorTable()
     {
         try {
@@ -211,4 +309,5 @@ public class Server
             System.out.println(e.getMessage());
         }
     }
+    //#endregion
 }
