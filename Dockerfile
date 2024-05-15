@@ -1,9 +1,26 @@
-FROM openjdk:8-jdk-alpine
-VOLUME /tmp
-ARG JAVA_OPTS
-ENV JAVA_OPTS=$JAVA_OPTS
-COPY target/demo-1.0-SNAPSHOT.jar kodetest.jar
-EXPOSE 4444
-ENTRYPOINT exec java $JAVA_OPTS -jar kodetest.jar
-# For Spring-Boot project, use the entrypoint below to reduce Tomcat startup time.
-#ENTRYPOINT exec java $JAVA_OPTS -Djava.security.egd=file:/dev/./urandom -jar kodetest.jar
+# Use an official Maven image as the base image
+FROM maven:3.8.4-openjdk-11-slim AS build
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the pom.xml file to the working directory
+COPY pom.xml /app/
+
+# Copy the rest of the source code to the working directory
+COPY app/src/ /app/
+
+# Build the application using Maven
+RUN mvn clean package -DskipTests
+
+# Use an official OpenJDK image as the base image
+FROM openjdk:11-jre-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the built JAR file from the previous stage to the container
+COPY --from=build /app/target/demo-1.0-SNAPSHOT.jar /app/demo.jar
+
+# Set the command to run the application
+CMD ["java", "-jar", "/app/demo.jar"]
